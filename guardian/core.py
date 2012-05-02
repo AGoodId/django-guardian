@@ -67,14 +67,19 @@ class ObjectPermissionChecker(object):
             elif self.user:
                 perms = list(set(chain(*Permission.objects
                     .filter(content_type=ctype)
-                    .filter(
-                        Q(userobjectpermission__content_type=F('content_type'),
+                    .filter(userobjectpermission__content_type=F('content_type'),
                             userobjectpermission__user=self.user,
-                            userobjectpermission__object_pk=obj.pk) |
-                        Q(groupobjectpermission__content_type=F('content_type'),
-                            groupobjectpermission__group__user=self.user,
-                            groupobjectpermission__object_pk=obj.pk))
+                            userobjectpermission__object_pk=obj.pk)
                     .values_list("codename"))))
+                user_groups = self.user.groups.all()
+                group_perms = list(set(chain(*Permission.objects
+                    .filter(content_type=ctype)
+                    .filter(
+                        groupobjectpermission__content_type=F('content_type'),
+                        groupobjectpermission__group__in=user_groups,
+                        groupobjectpermission__object_pk=obj.pk)
+                    .values_list("codename"))))
+                perms.extend(group_perms)
             else:
                 perms = list(set(chain(*Permission.objects
                     .filter(content_type=ctype)
