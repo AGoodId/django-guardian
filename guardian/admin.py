@@ -3,7 +3,7 @@ from django.conf import settings
 from django.conf.urls.defaults import patterns, url
 from django.contrib import admin
 from django.contrib import messages
-from django.contrib.admin.widgets import FilteredSelectMultiple
+from django.contrib.admin.widgets import FilteredSelectMultiple, ForeignKeyRawIdWidget
 from django.contrib.auth.models import User, Group
 from django.core.urlresolvers import reverse
 from django.shortcuts import render_to_response, get_object_or_404, redirect
@@ -12,11 +12,15 @@ from django.utils.datastructures import SortedDict
 from django.utils.translation import ugettext, ugettext_lazy as _
 
 from guardian.forms import UserObjectPermissionsForm
+from guardian.forms import AddUserObjectPermissionsForm
 from guardian.forms import GroupObjectPermissionsForm
+from guardian.forms import AddGroupObjectPermissionsForm
 from guardian.shortcuts import get_perms
 from guardian.shortcuts import get_users_with_perms
 from guardian.shortcuts import get_groups_with_perms
 from guardian.shortcuts import get_perms_for_model
+from guardian.models import UserObjectPermission
+from guardian.models import GroupObjectPermission
 
 
 class AdminUserObjectPermissionsForm(UserObjectPermissionsForm):
@@ -29,6 +33,25 @@ class AdminUserObjectPermissionsForm(UserObjectPermissionsForm):
         return FilteredSelectMultiple(_("Permissions"), False)
 
 
+class AdminAddUserObjectPermissionsForm(AddUserObjectPermissionsForm):
+    """
+    Extends :form:`AddUserObjectPermissionsForm`. It only overrides
+    ``get_obj_perms_field_widget`` method so it return
+    ``django.contrib.admin.widgets.FilteredSelectMultiple`` widget.
+    """
+    def __init__(self, *args, **kwargs):
+        if kwargs.has_key('admin_site'):
+            self.admin_site = kwargs.pop('admin_site')
+        super(AdminAddUserObjectPermissionsForm, self).__init__(*args, **kwargs)
+
+    def get_obj_perms_field_widget(self):
+        return FilteredSelectMultiple(_("Permissions"), False)
+
+    def get_user_field_widget(self):
+        return ForeignKeyRawIdWidget(UserObjectPermission._meta.get_field('user').rel,
+            self.admin_site)
+
+
 class AdminGroupObjectPermissionsForm(GroupObjectPermissionsForm):
     """
     Extends :form:`GroupObjectPermissionsForm`. It only overrides
@@ -37,6 +60,25 @@ class AdminGroupObjectPermissionsForm(GroupObjectPermissionsForm):
     """
     def get_obj_perms_field_widget(self):
         return FilteredSelectMultiple(_("Permissions"), False)
+
+
+class AdminAddGroupObjectPermissionsForm(AddGroupObjectPermissionsForm):
+    """
+    Extends :form:`AddGroupObjectPermissionsForm`. It only overrides
+    ``get_obj_perms_field_widget`` method so it return
+    ``django.contrib.admin.widgets.FilteredSelectMultiple`` widget.
+    """
+    def __init__(self, *args, **kwargs):
+        if kwargs.has_key('admin_site'):
+            self.admin_site = kwargs.pop('admin_site')
+        super(AdminAddGroupObjectPermissionsForm, self).__init__(*args, **kwargs)
+
+    def get_obj_perms_field_widget(self):
+        return FilteredSelectMultiple(_("Permissions"), False)
+
+    def get_group_field_widget(self):
+        return ForeignKeyRawIdWidget(GroupObjectPermission._meta.get_field('group').rel,
+            self.admin_site)
 
 
 class GuardedModelAdmin(admin.ModelAdmin):
@@ -134,10 +176,18 @@ class GuardedModelAdmin(admin.ModelAdmin):
             url(r'^(?P<object_pk>.+)/permissions/$',
                 view=self.admin_site.admin_view(self.obj_perms_manage_view),
                 name='%s_%s_permissions' % info),
+            url(r'^(?P<object_pk>.+)/permissions/user-manage/add/$',
+                view=self.admin_site.admin_view(
+                    self.obj_perms_add_user_view),
+                name='%s_%s_permissions_add_user' % info),
             url(r'^(?P<object_pk>.+)/permissions/user-manage/(?P<user_id>\-?\d+)/$',
                 view=self.admin_site.admin_view(
                     self.obj_perms_manage_user_view),
                 name='%s_%s_permissions_manage_user' % info),
+            url(r'^(?P<object_pk>.+)/permissions/group-manage/add/$',
+                view=self.admin_site.admin_view(
+                    self.obj_perms_add_group_view),
+                name='%s_%s_permissions_add_group' % info),
             url(r'^(?P<object_pk>.+)/permissions/group-manage/(?P<group_id>\-?\d+)/$',
                 view=self.admin_site.admin_view(
                     self.obj_perms_manage_group_view),
@@ -237,6 +287,64 @@ class GuardedModelAdmin(admin.ModelAdmin):
             return 'admin/guardian/contrib/grappelli/obj_perms_manage.html'
         return self.obj_perms_manage_template
 
+    def obj_perms_add_user_view(self, request, object_pk):
+        """
+        Adds permissions for new users for current object.
+        """
+        obj = get_object_or_404(self.queryset(request), pk=object_pk)
+        form_class = self.get_obj_perms_add_user_form()
+        form = form_class(obj, request.POST or None, admin_site=self.admin_site)
+
+        if request.method == 'POST' and form.is_valid():
+            form.save_obj_perms()
+            msg = ugettext("Permissions saved.")
+            messages.success(request, msg)
+            info = (
+                self.admin_site.name,
+                self.model._meta.app_label,
+                self.model._meta.module_name
+            )
+            url = reverse(
+                '%s:%s_%s_permissions' % info, args=[obj.pk]
+            )
+            return redirect(url)
+
+        context = self.get_obj_perms_base_context(request, obj)
+        context['modeladmin'] = self
+        context['form'] = form
+
+        return render_to_response(self.get_obj_perms_manage_user_template(),
+            context, RequestContext(request, current_app=self.admin_site.name))
+
+    def obj_perms_add_group_view(self, request, object_pk):
+        """
+        Adds permissions for new groups for current object.
+        """
+        obj = get_object_or_404(self.queryset(request), pk=object_pk)
+        form_class = self.get_obj_perms_add_group_form()
+        form = form_class(obj, request.POST or None, admin_site=self.admin_site)
+
+        if request.method == 'POST' and form.is_valid():
+            form.save_obj_perms()
+            msg = ugettext("Permissions saved.")
+            messages.success(request, msg)
+            info = (
+                self.admin_site.name,
+                self.model._meta.app_label,
+                self.model._meta.module_name
+            )
+            url = reverse(
+                '%s:%s_%s_permissions' % info, args=[obj.pk]
+            )
+            return redirect(url)
+
+        context = self.get_obj_perms_base_context(request, obj)
+        context['modeladmin'] = self
+        context['form'] = form
+
+        return render_to_response(self.get_obj_perms_manage_group_template(),
+            context, RequestContext(request, current_app=self.admin_site.name))
+
     def obj_perms_manage_user_view(self, request, object_pk, user_id):
         """
         Manages selected users' permissions for current object.
@@ -256,12 +364,12 @@ class GuardedModelAdmin(admin.ModelAdmin):
                 self.model._meta.module_name
             )
             url = reverse(
-                '%s:%s_%s_permissions_manage_user' % info,
-                args=[obj.pk, user.id]
+                '%s:%s_%s_permissions' % info, args=[obj.pk]
             )
             return redirect(url)
 
         context = self.get_obj_perms_base_context(request, obj)
+        context['modeladmin'] = self
         context['user_obj'] = user
         context['user_perms'] = get_perms(user, obj)
         context['form'] = form
@@ -282,6 +390,20 @@ class GuardedModelAdmin(admin.ModelAdmin):
         if 'grappelli' in settings.INSTALLED_APPS:
             return 'admin/guardian/contrib/grappelli/obj_perms_manage_user.html'
         return self.obj_perms_manage_user_template
+
+    def get_obj_perms_add_user_form(self):
+        """
+        Returns form class for user object permissions management.  By default
+        :form:`AdminAddUserObjectPermissionsForm` is returned.
+        """
+        return AdminAddUserObjectPermissionsForm
+
+    def get_obj_perms_add_group_form(self):
+        """
+        Returns form class for user object permissions management.  By default
+        :form:`AdminAddGroupObjectPermissionsForm` is returned.
+        """
+        return AdminAddGroupObjectPermissionsForm
 
     def get_obj_perms_manage_user_form(self):
         """
@@ -309,12 +431,12 @@ class GuardedModelAdmin(admin.ModelAdmin):
                 self.model._meta.module_name
             )
             url = reverse(
-                '%s:%s_%s_permissions_manage_group' % info,
-                args=[obj.pk, group.id]
+                '%s:%s_%s_permissions' % info, args=[obj.pk]
             )
             return redirect(url)
 
         context = self.get_obj_perms_base_context(request, obj)
+        context['modeladmin'] = self
         context['group_obj'] = group
         context['group_perms'] = get_perms(group, obj)
         context['form'] = form
