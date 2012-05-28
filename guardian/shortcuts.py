@@ -246,6 +246,26 @@ def get_groups_with_perms(obj, attach_perms=False):
                 groups[group] = get_perms(group, obj)
         return groups
 
+def get_pk_list_for_user(user, codename, ctype):
+  """
+  Fetches a list of primary keys given a User, a Permission codename and
+  a ContentType.
+  """
+  # Now we should extract list of pk values for which we would filter queryset
+  pk_list = list(UserObjectPermission.objects\
+    .filter(user=user)\
+    .filter(permission__content_type=ctype)\
+    .filter(permission__codename=codename)\
+    .values_list('object_pk', flat=True)
+  )
+  pk_list.extend(list(GroupObjectPermission.objects\
+    .filter(group__user=user)\
+    .filter(permission__content_type=ctype)\
+    .filter(permission__codename__in=codename)\
+    .values_list('object_pk', flat=True)
+  ))
+  return sorted(pk_list)
+
 def get_objects_for_user(user, perms, klass=None, use_groups=True, any_perm=False):
     """
     Returns queryset of objects for which a given ``user`` has *all*
