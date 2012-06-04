@@ -260,7 +260,7 @@ def get_pk_list_for_user(user, codename, ctype):
   group_ops = GroupObjectPermission.objects\
     .filter(group__user=user)\
     .filter(permission__content_type=ctype)\
-    .filter(permission__codename__in=codename)\
+    .filter(permission__codename__in=[codename])\
     .values_list('object_pk', flat=True)
   ops = list(user_ops)
   ops.extend(list(group_ops))
