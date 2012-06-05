@@ -286,7 +286,7 @@ def get_perms_for_user_and_queryset(user, qs):
       .values_list("codename")))
     for key, value in ops_dict.items():
       ops_dict[key] = all_perms
-  elif self.user:
+  elif user:
     # Fetch explicitly assigned perms for no su
     user_ops = UserObjectPermission.objects\
       .filter(user=user)\
