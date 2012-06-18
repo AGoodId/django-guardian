@@ -268,15 +268,22 @@ def get_pk_list_for_user(user, codename, ctype):
   ops.extend(list(group_ops))
   return sorted(ops)
 
-def get_perms_for_user_and_queryset(user, qs):
+def get_perms_for_user_and_queryset(user, qs_or_list):
   """
   Fetches a queryset of Permission objects that are assigned to a User
   for a queryset of objects.
   """
-  ctype = ContentType.objects.get_for_model(qs.model)
+  # If it is a queryset, use the model attribute to get the content type.
+  # Otherwise, use the type of the first entry.
+  if hasattr(qs_or_list, 'model'):
+    ctype = ContentType.objects.get_for_model(qs_or_list.model)
+  elif len(qs_or_list) > 0:
+    ctype = ContentType.objects.get_for_model(qs_or_list[0])
+  else:
+    return []
   ops_dict = {}
-  [ops_dict.__setitem__(o.pk, []) for o in qs]
-  pk_list = [o.pk for o in qs]
+  [ops_dict.__setitem__(o.pk, []) for o in qs_or_list]
+  pk_list = [o.pk for o in qs_or_list]
   if user and not user.is_active:
     return []
   elif user and user.is_superuser:
