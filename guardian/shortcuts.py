@@ -285,7 +285,7 @@ def get_perms_for_user_and_queryset(user, qs_or_list):
   [ops_dict.__setitem__(o.pk, []) for o in qs_or_list]
   pk_list = [o.pk for o in qs_or_list]
   if user and not user.is_active:
-    return []
+    return {}
   elif user and user.is_superuser:
     # Superuser should have all permissions
     all_perms = list(chain(*Permission.objects
