@@ -308,7 +308,7 @@ def get_perms_for_user_and_queryset(user, qs_or_list):
     ops = list(user_ops)
     ops.extend(list(group_ops))
     for op in ops:
-      ops_dict[op['object_pk']].append(op['permission__codename'])
+      ops_dict[int(op['object_pk'])].append(op['permission__codename'])
   return ops_dict
 
 def get_objects_for_user(user, perms, klass=None, use_groups=True, any_perm=False):
